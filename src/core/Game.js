@@ -109,10 +109,13 @@ export class Game {
     ctx.save();
     ctx.font = '12px monospace';
     ctx.textBaseline = 'top';
+    // Prawy górny róg – lewy zajmuje HUD.
+    const w = ctx.measureText(text).width + 12;
+    const x = VIEW.width - w - 6;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect(6, 6, ctx.measureText(text).width + 12, 20);
+    ctx.fillRect(x, 6, w, 20);
     ctx.fillStyle = '#9f9';
-    ctx.fillText(text, 12, 10);
+    ctx.fillText(text, x + 6, 10);
     ctx.restore();
   }
 }

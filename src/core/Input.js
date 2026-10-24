@@ -1,4 +1,4 @@
-import { INPUT } from '../config.js';
+import { INPUT, VIEW } from '../config.js';
 
 // Mapowanie klawiszy na abstrakcyjne akcje. Używamy `event.code`, więc układ klawiatury nie ma znaczenia.
 const KEY_BINDINGS = {
@@ -42,7 +42,8 @@ export class Input {
     this.keysDown = new Set();
     this.keysPressedQueue = new Set();
     this.keysReleasedQueue = new Set();
-    this.pointerQueued = false;
+    this.pointerQueued = null; // pozycja ostatniego kliknięcia/dotknięcia między krokami
+    this.tap = null; // { x, y } w pikselach gry – kliknięcie w tym kroku
 
     this.down = {};
     this.pressed = {};
@@ -74,7 +75,12 @@ export class Input {
       e.preventDefault();
       // W <iframe> klawiatura działa dopiero, gdy ramka ma fokus.
       pointerTarget.focus({ preventScroll: true });
-      this.pointerQueued = true;
+      // Przeliczenie z pikseli ekranu na wewnętrzną rozdzielczość gry.
+      const rect = pointerTarget.getBoundingClientRect();
+      this.pointerQueued = {
+        x: ((e.clientX - rect.left) / rect.width) * VIEW.width,
+        y: ((e.clientY - rect.top) / rect.height) * VIEW.height,
+      };
       this.hasInteracted = true;
     });
     pointerTarget.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -163,11 +169,12 @@ export class Input {
       this.released[action] = (keyReleased && !keyDown) || (!padDown && padWasDown);
     }
 
-    this.anyPressedThisStep = anyKey || pad.anyNewButton || this.pointerQueued;
+    this.tap = this.pointerQueued;
+    this.anyPressedThisStep = anyKey || pad.anyNewButton || !!this.tap;
     this.padPrevActions = pad.actions;
     this.keysPressedQueue.clear();
     this.keysReleasedQueue.clear();
-    this.pointerQueued = false;
+    this.pointerQueued = null;
   }
 
   isDown(action) {

@@ -1,7 +1,6 @@
 import { GAME_TITLE, VIEW } from '../config.js';
 import { clamp, createCanvas, createRng } from '../core/util.js';
-import testLevel from '../world/levels/testLevel.js';
-import { LevelScene } from './LevelScene.js';
+import { CharacterSelectScene } from './CharacterSelectScene.js';
 
 const W = VIEW.width;
 const H = VIEW.height;
@@ -95,9 +94,8 @@ export class TitleScene {
     this.flash = Math.max(0, this.flash - dt * 2.5);
 
     if (this.t > 1.2 && this.game.input.anyPressed()) {
-      // Wybór postaci powstanie w Etapie 3 – na razie od razu poziom testowy.
       this.flash = 1;
-      this.game.setScene(new LevelScene(testLevel));
+      this.game.setScene(new CharacterSelectScene());
     }
   }
 

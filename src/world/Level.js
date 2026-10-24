@@ -12,6 +12,11 @@ const CHAR_TO_TILE = {
   '-': TILE.ONE_WAY,
 };
 
+// Obiekty stawiane bezpośrednio na mapie znakiem; komórka pod nimi jest pusta.
+const CHAR_TO_OBJECT = {
+  D: 'dummy',
+};
+
 /**
  * Poziom: siatka kafelków wczytana z danych (tablica napisów) + zapytania o kolizje.
  * Nie zawiera żadnego kodu rysującego – tym zajmuje się LevelRenderer.
@@ -27,13 +32,19 @@ export class Level {
     this.cols = Math.max(...data.tiles.map((row) => row.length));
     this.grid = new Uint8Array(this.cols * this.rows);
     this.spawn = { x: this.tileSize * 2, y: this.tileSize * 2 };
+    this.objects = []; // { type, x, y } – x to środek, y to stopy (dolna krawędź komórki)
 
     data.tiles.forEach((row, ty) => {
       for (let tx = 0; tx < this.cols; tx++) {
         const ch = row[tx] ?? '.';
+        // Spawn i obiekty stoją na środku dolnej krawędzi swojej komórki.
+        const anchor = { x: (tx + 0.5) * this.tileSize, y: (ty + 1) * this.tileSize };
         if (ch === 'P') {
-          // Spawn to środek dolnej krawędzi komórki (pozycja stóp).
-          this.spawn = { x: (tx + 0.5) * this.tileSize, y: (ty + 1) * this.tileSize };
+          this.spawn = anchor;
+          continue;
+        }
+        if (CHAR_TO_OBJECT[ch]) {
+          this.objects.push({ type: CHAR_TO_OBJECT[ch], ...anchor });
           continue;
         }
         const tile = CHAR_TO_TILE[ch];

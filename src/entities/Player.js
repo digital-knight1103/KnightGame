@@ -1,4 +1,3 @@
-import { PLAYER } from '../config.js';
 import { clamp } from '../core/util.js';
 import { TILE } from '../world/Level.js';
 
@@ -11,25 +10,35 @@ const easeOut = (t) => 1 - (1 - t) ** 2;
 
 // Udział fazy „podciągnięcia w górę” w całej animacji wspinaczki na krawędź.
 const CLIMB_UP_PART = 0.6;
+// Czas salta przy podwójnym skoku (tylko wizualnie).
+export const AIR_FLIP_TIME = 0.32;
 
 /**
- * Gracz: wspólna logika ruchu dla obu postaci (statystyki przychodzą z konfiguracji).
+ * Gracz: wspólna logika ruchu i walki dla obu postaci. Postać (`character`) dostarcza
+ * statystyki oraz dwie umiejętności: atak i specjalną.
  *
- * Maszyna stanów:
- *   idle, run, crouch, jump, fall – zwykły ruch, wybierany na podstawie fizyki,
+ * Stan ruchu (`moveState`), wynikający z fizyki:
+ *   idle, run, crouch, jump, fall – zwykły ruch,
  *   land       – krótkie unieruchomienie po upadku z dużej wysokości,
  *   ledgeGrab  – wiszenie na krawędzi (bez grawitacji),
  *   climb      – skryptowane podciągnięcie na krawędź (bez kolizji).
- * Stany attack/special/hurt/dead dojdą w kolejnych etapach.
+ * Aktywna umiejętność (`action`) nakłada się na ruch: zmienia prędkość, blokuje skok itp.
+ * Publiczny `state` to nazwa stanu akcji (attack/special) albo stan ruchu.
+ * Stany hurt/dead dojdą w Etapie 4.
  *
  * Pozycja (x, y) to lewy górny róg hitboxa. Kolizje z kafelkami rozwiązujemy osobno
  * dla osi X i Y, co daje stabilne ślizganie po ścianach i podłodze.
  */
 export class Player {
-  constructor(level, stats = PLAYER) {
+  constructor(level, character) {
     this.level = level;
-    this.stats = stats;
-    this.w = stats.width;
+    this.character = character;
+    this.stats = character.stats;
+    this.w = this.stats.width;
+    this.maxHealth = character.maxHealth;
+    this.health = this.maxHealth;
+    this.attack = character.createAttack(this);
+    this.special = character.createSpecial(this);
     this.respawn(level.spawn);
   }
 
@@ -40,11 +49,15 @@ export class Player {
     this.vx = 0;
     this.vy = 0;
     this.facing = 1;
-    this.state = 'idle';
+    this.moveState = 'idle';
     this.stateTime = 0;
+    this.action = null;
+    this.attack.reset();
+    this.special.reset();
     this.onGround = true;
     this.crouching = false;
     this.isJumping = false; // wznoszenie z wciśniętym skokiem (dla zmiennej wysokości)
+    this.airJumpsLeft = this.stats.airJumps;
     this.coyoteTimer = 0;
     this.jumpBufferTimer = 0;
     this.dropThroughTimer = 0;
@@ -57,6 +70,7 @@ export class Player {
     this.runPhase = 0;
     this.squashX = 1;
     this.squashY = 1;
+    this.flipTime = 0;
 
     this.prevCenterX = this.centerX;
     this.prevFeetY = this.feetY;
@@ -70,23 +84,33 @@ export class Player {
     return this.y + this.h;
   }
 
-  // Dla kamery: czy gracz ma „pewny grunt” (także wisząc na krawędzi).
-  get isGrounded() {
-    return this.onGround || this.state === 'ledgeGrab' || this.state === 'climb';
+  get state() {
+    return this.action ? this.action.stateName : this.moveState;
   }
 
-  setState(state) {
-    if (this.state !== state) {
-      this.state = state;
+  // Nietykalność (np. początek przewrotu) – wykorzystana przy obrażeniach w Etapie 4.
+  get invulnerable() {
+    return !!(this.action && this.action.invulnerable);
+  }
+
+  // Dla kamery: czy gracz ma „pewny grunt” (także wisząc na krawędzi).
+  get isGrounded() {
+    return this.onGround || this.moveState === 'ledgeGrab' || this.moveState === 'climb';
+  }
+
+  setMoveState(state) {
+    if (this.moveState !== state) {
+      this.moveState = state;
       this.stateTime = 0;
     }
   }
 
-  update(dt, input) {
+  update(dt, input, world) {
     this.prevCenterX = this.centerX;
     this.prevFeetY = this.feetY;
     this.animTime += dt;
     this.stateTime += dt;
+    this.flipTime = Math.max(0, this.flipTime - dt);
 
     this.jumpBufferTimer = Math.max(0, this.jumpBufferTimer - dt);
     this.coyoteTimer = Math.max(0, this.coyoteTimer - dt);
@@ -95,11 +119,21 @@ export class Player {
     // Bufor skoku: naciśnięcie tuż przed lądowaniem i tak zostanie wykonane.
     if (input.wasPressed('jump')) this.jumpBufferTimer = this.stats.jumpBufferTime;
 
+    this.attack.tick(dt);
+    this.special.tick(dt);
+
     const moveDir = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
 
-    if (this.state === 'ledgeGrab') this.updateLedgeGrab(input, moveDir);
-    else if (this.state === 'climb') this.updateClimb();
-    else this.updateMovement(dt, input, moveDir);
+    if (this.moveState === 'ledgeGrab') this.updateLedgeGrab(input, moveDir);
+    else if (this.moveState === 'climb') this.updateClimb();
+    else {
+      this.startActions(input);
+      if (this.action) {
+        this.action.update(dt, input, world);
+        if (!this.action.active) this.action = null;
+      }
+      this.updateMovement(dt, input, moveDir);
+    }
 
     // Rozciąganie/ściskanie wraca płynnie do normy.
     const k = 1 - Math.exp(-14 * dt);
@@ -107,27 +141,57 @@ export class Player {
     this.squashY += (1 - this.squashY) * k;
   }
 
+  startActions(input) {
+    if (this.moveState === 'land') return;
+    const current = this.action;
+    if (input.wasPressed('special') && (!current || current.cancelable) && this.special.tryStart(input)) {
+      if (current) current.cancel();
+      this.action = this.special;
+      return;
+    }
+    if (!current && input.wasPressed('attack') && this.attack.tryStart(input)) {
+      this.action = this.attack;
+    }
+  }
+
+  // Akcje wykonuje się na stojąco: kucająca postać wstaje, o ile ma miejsce nad głową.
+  standUpForAction() {
+    if (!this.crouching) return true;
+    if (!this.canStand()) return false;
+    this.setCrouch(false);
+    return true;
+  }
+
   updateMovement(dt, input, moveDir) {
     const s = this.stats;
-    const landing = this.state === 'land';
-    const dir = landing ? 0 : moveDir;
+    const act = this.action;
+    const landing = this.moveState === 'land';
+    const moveScale = act ? act.moveScale : 1;
+    const dir = landing || moveScale === 0 ? 0 : moveDir;
 
     // Kucanie: niższy hitbox; wstajemy tylko, gdy nad głową jest miejsce.
-    const wantsCrouch = this.onGround && !landing && input.isDown('down');
-    if (wantsCrouch && !this.crouching) this.setCrouch(true);
-    else if (!wantsCrouch && this.crouching && this.canStand()) this.setCrouch(false);
+    if (!(act && act.forceCrouch)) {
+      const wantsCrouch = this.onGround && !landing && !act && input.isDown('down');
+      if (wantsCrouch && !this.crouching) this.setCrouch(true);
+      else if (!wantsCrouch && this.crouching && this.canStand()) this.setCrouch(false);
+    }
 
     // Ruch poziomy z bezwładnością: osobne przyspieszenie, hamowanie i zawracanie.
-    if (dir !== 0) this.facing = dir;
-    const maxSpeed = this.crouching ? s.crouchSpeed : s.runSpeed;
-    let accel;
-    if (dir === 0) accel = this.onGround ? s.groundDecel : s.airDecel;
-    else if (this.vx !== 0 && Math.sign(this.vx) !== dir) accel = this.onGround ? s.turnAccel : s.airAccel;
-    else accel = this.onGround ? s.groundAccel : s.airAccel;
-    this.vx = approach(this.vx, dir * maxSpeed, accel * dt);
+    if (dir !== 0 && !(act && act.lockFacing)) this.facing = dir;
+    if (act && act.controlsVelocity) {
+      this.vx = act.vx;
+    } else {
+      const maxSpeed = (this.crouching ? s.crouchSpeed : s.runSpeed) * moveScale;
+      let accel;
+      if (dir === 0) accel = act && act.decel && this.onGround ? act.decel : this.onGround ? s.groundDecel : s.airDecel;
+      else if (this.vx !== 0 && Math.sign(this.vx) !== dir) accel = this.onGround ? s.turnAccel : s.airAccel;
+      else accel = this.onGround ? s.groundAccel : s.airAccel;
+      this.vx = approach(this.vx, dir * maxSpeed, accel * dt);
+    }
 
-    // Skok (z coyote time) albo zeskok z platformy przechodniej (↓ + skok).
-    if (this.jumpBufferTimer > 0 && !landing && (this.onGround || this.coyoteTimer > 0)) {
+    // Skok (z coyote time), zeskok z platformy przechodniej (↓ + skok) albo skok w powietrzu.
+    const canJump = !landing && (!act || act.allowJump);
+    if (canJump && this.jumpBufferTimer > 0 && (this.onGround || this.coyoteTimer > 0)) {
       if (this.onGround && input.isDown('down') && this.isOnOneWayOnly()) {
         this.jumpBufferTimer = 0;
         this.dropThroughTimer = s.dropThroughTime;
@@ -135,15 +199,12 @@ export class Player {
         if (this.crouching && this.canStand()) this.setCrouch(false);
       } else if (this.canStand()) {
         if (this.crouching) this.setCrouch(false);
-        this.vy = -Math.sqrt(2 * s.gravity * s.jumpHeight);
-        this.onGround = false;
-        this.isJumping = true;
-        this.jumpBufferTimer = 0;
-        this.coyoteTimer = 0;
-        this.airPeakY = this.y;
-        this.squashX = 0.8;
-        this.squashY = 1.22;
+        this.launch(s.jumpHeight);
       }
+    } else if (canJump && input.wasPressed('jump') && !this.onGround && this.airJumpsLeft > 0) {
+      this.airJumpsLeft--;
+      this.launch(s.airJumpHeight);
+      this.flipTime = AIR_FLIP_TIME;
     }
 
     // Zmienna wysokość skoku: puszczenie przycisku przy wznoszeniu ucina prędkość.
@@ -169,26 +230,39 @@ export class Player {
 
     if (this.onGround) {
       this.coyoteTimer = s.coyoteTime;
+      this.airJumpsLeft = s.airJumps;
       if (!wasOnGround) this.onLand(impactSpeed);
       this.airPeakY = this.y;
       this.runPhase += (Math.abs(this.vx) * dt) / 16;
     } else {
       this.airPeakY = Math.min(this.airPeakY, this.y);
-      if (this.crouching && this.canStand()) this.setCrouch(false);
-      if (this.vy >= 0 && this.regrabTimer <= 0 && !this.crouching && this.tryLedgeGrab(prevTop, moveDir)) return;
+      if (this.crouching && !(act && act.forceCrouch) && this.canStand()) this.setCrouch(false);
+      const canGrab = this.vy >= 0 && this.regrabTimer <= 0 && !this.crouching && !act;
+      if (canGrab && this.tryLedgeGrab(prevTop, moveDir)) return;
     }
 
-    if (this.state === 'land') {
-      if (this.stateTime >= s.heavyLandingTime) this.setState('idle');
+    if (this.moveState === 'land') {
+      if (this.stateTime >= s.heavyLandingTime) this.setMoveState('idle');
       return;
     }
     if (this.onGround) {
-      if (this.crouching) this.setState('crouch');
-      else if (dir !== 0 || Math.abs(this.vx) > 5) this.setState('run');
-      else this.setState('idle');
+      if (this.crouching) this.setMoveState('crouch');
+      else if (dir !== 0 || Math.abs(this.vx) > 5) this.setMoveState('run');
+      else this.setMoveState('idle');
     } else {
-      this.setState(this.vy < 0 ? 'jump' : 'fall');
+      this.setMoveState(this.vy < 0 ? 'jump' : 'fall');
     }
+  }
+
+  launch(height) {
+    this.vy = -Math.sqrt(2 * this.stats.gravity * height);
+    this.onGround = false;
+    this.isJumping = true;
+    this.jumpBufferTimer = 0;
+    this.coyoteTimer = 0;
+    this.airPeakY = this.y;
+    this.squashX = 0.8;
+    this.squashY = 1.22;
   }
 
   onLand(impactSpeed) {
@@ -196,8 +270,9 @@ export class Player {
     const squash = clamp(impactSpeed / 2400, 0.05, 0.3);
     this.squashY = 1 - squash;
     this.squashX = 1 + squash * 0.8;
-    if (fallDistance >= this.stats.heavyLandingDistance) {
-      this.setState('land');
+    this.flipTime = 0;
+    if (fallDistance >= this.stats.heavyLandingDistance && !this.action) {
+      this.setMoveState('land');
       this.vx *= 0.2;
       this.squashY = 0.65;
       this.squashX = 1.3;
@@ -331,8 +406,10 @@ export class Player {
       this.vx = 0;
       this.vy = 0;
       this.isJumping = false;
+      this.flipTime = 0;
+      this.airJumpsLeft = s.airJumps;
       this.ledge = { dir, hangX, hangY, standX, standY };
-      this.setState('ledgeGrab');
+      this.setMoveState('ledgeGrab');
       return true;
     }
     return false;
@@ -345,13 +422,13 @@ export class Player {
       this.regrabTimer = this.stats.ledgeRegrabDelay;
       this.onGround = false;
       this.airPeakY = this.y;
-      this.setState('fall');
+      this.setMoveState('fall');
       return;
     }
     // Podciągnięcie: skok lub w górę.
     if (this.jumpBufferTimer > 0 || input.wasPressed('up')) {
       this.jumpBufferTimer = 0;
-      this.setState('climb');
+      this.setMoveState('climb');
     }
   }
 
@@ -372,12 +449,12 @@ export class Player {
       this.airPeakY = this.y;
       this.squashY = 0.9;
       this.squashX = 1.08;
-      this.setState('idle');
+      this.setMoveState('idle');
     }
   }
 
   // Postęp wspinaczki 0..1 (dla renderera).
   get climbProgress() {
-    return this.state === 'climb' ? clamp(this.stateTime / this.stats.ledgeClimbTime, 0, 1) : 0;
+    return this.moveState === 'climb' ? clamp(this.stateTime / this.stats.ledgeClimbTime, 0, 1) : 0;
   }
 }

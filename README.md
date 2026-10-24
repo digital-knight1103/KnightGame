@@ -20,7 +20,7 @@ Na GitHub Pages wystarczy wrzucić pliki – wszystkie ścieżki są względne.
 
 - [x] **Etap 1 – Fundament**: pętla gry ze stałym krokiem 60 Hz i interpolacją, skalowanie canvasu 960×540 do okna/`<iframe>`, obsługa klawiatury i gamepada, menedżer scen z płynnymi przejściami, animowany ekran tytułowy.
 - [x] **Etap 2 – Ruch**: poziom testowy z kafelków (zapisany jako dane), kolizje, platformy przechodnie, kamera z wyprzedzeniem, pełny ruch gracza: bezwładność, coyote time, bufor skoku, zmienna wysokość skoku, chwytanie krawędzi i podciąganie, kucanie, ciężkie lądowanie, proceduralne animacje.
-- [ ] Etap 3 – Dwie postacie
+- [x] **Etap 3 – Dwie postacie**: ekran wyboru postaci (klawiatura, gamepad, dotyk), Rycerz Cieniołamacz (kombo mieczem z 3 ciosów, blok tarczą z wytrzymałością) i Łowczyni Świetlików (kusza z ładowanym, przebijającym bełtem, przewrót z nietykalnością, podwójny skok), manekiny treningowe, prosty HUD (serca, pasek umiejętności).
 - [ ] Etap 4 – Potwory i walka
 - [ ] Etap 5 – Klimat
 - [ ] Etap 6 – Zawartość
@@ -42,8 +42,17 @@ Na GitHub Pages wystarczy wrzucić pliki – wszystkie ścieżki są względne.
 
 **Krawędzie:** skacząc w stronę ściany, trzymaj kierunek do niej – postać złapie krawędź. Skok lub ↑ = podciągnięcie, ↓ albo kierunek od ściany = puszczenie.
 
-Z ekranu tytułowego dowolny klawisz (lub kliknięcie / dotknięcie) przenosi na poziom testowy. Esc na poziomie tymczasowo wraca do menu (pełna pauza w Etapie 7). Wybór postaci pojawi się w Etapie 3.
+### Postacie
+
+| | Rycerz Cieniołamacz | Łowczyni Świetlików |
+|---|---|---|
+| Zdrowie | 6 serc | 4 serca |
+| Ruch | wolniejszy, niższy skok | szybka, wyższy skok + **podwójny skok** (z saltem) |
+| Atak (J) | **kombo mieczem**: naciskaj J w rytm ciosów – 3. cios jest silniejszy i odrzuca | **kusza**: krótko = zwykły bełt; przytrzymaj (aż bełt rozbłyśnie) i puść = naładowany bełt, przebija do 4 celów |
+| Umiejętność (K) | **blok tarczą** (trzymaj K): chroni z przodu, zużywa wytrzymałość (pasek w HUD) | **przewrót**: szybki zryw przy ziemi z chwilową nietykalnością; przerywa celowanie |
+
+Ekran tytułowy → wybór postaci (← → i Enter/Spacja, albo dotknij panelu, a potem dotknij go ponownie) → poziom testowy. Esc na poziomie wraca do wyboru postaci (pełna pauza w Etapie 7). Obrażenia zadawane graczowi i przeciwnicy pojawią się w Etapie 4. Na razie ataki testuje się na manekinach.
 
 ### Poziom testowy (od lewej)
 
-schodki 1–3 kafelki → przepaść (upadek = powrót na start) → stos platform przechodnich → ściana 4 kafelki (tylko chwytem krawędzi) → płaskowyż z niskim tunelem (tylko kucając) → wieża i wysoki skok w dół (ciężkie lądowanie) → ściana 5 kafelków → schodki do końca mapy. Przy starcie jest też nawis do sprawdzenia uderzenia głową w sufit.
+schodki 1–3 kafelki → przepaść (upadek = powrót na start) → stos platform przechodnich → ściana 4 kafelki (tylko chwytem krawędzi) → płaskowyż z niskim tunelem (tylko kucając) → wieża i wysoki skok w dół (ciężkie lądowanie) → ściana 5 kafelków → schodki do końca mapy. Przy starcie jest też nawis do sprawdzenia uderzenia głową w sufit. Manekiny stoją przy starcie, pod platformami i trzy w rzędzie za wieżą (do sprawdzenia przebijającego bełtu).
