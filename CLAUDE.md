@@ -16,7 +16,9 @@ npx --yes http-server -p 8000 -c-1
 
 Then open http://localhost:8000. Python is not installed on this machine, but Node 18 and Chrome are. Press F3 in game to toggle the FPS/UPS/scene debug overlay.
 
-Headless check: `chrome --headless=new --screenshot` works, but under `--virtual-time-budget` `requestAnimationFrame` barely advances. To see the game after a few seconds, load it from a wrapper page whose `load` event is delayed by a slow resource. With `--enable-logging=stderr --v=0`, console messages appear in stderr as `INFO:CONSOLE` lines. "Working" means the game runs with **no console errors**. Also check it inside a resized `<iframe>` and at phone widths.
+Headless check: `chrome --headless=new --screenshot` works, but under `--virtual-time-budget` `requestAnimationFrame` barely advances. To see the game after a few seconds, load it from a wrapper page whose `load` event is delayed by a slow resource. With `--enable-logging=stderr --v=0`, console messages appear in stderr as `INFO:CONSOLE` lines. Use a separate `--user-data-dir` for each Chrome run, otherwise later screenshots silently fail. Key timing in headless is too imprecise to catch specific poses. To check visuals, render renderers directly from a test page that imports `/src/...`.
+
+Headless logic tests: `Player`, `Level` and `config` don't touch the DOM. Node 18 treats `.js` as CommonJS, so copy `src/` next to a `package.json` containing `{"type":"module"}` (outside the repo) and drive `Player.update(dt, fakeInput)` with a fake input that implements `isDown`, `wasPressed` and `wasReleased`. "Working" means the game runs with **no console errors**. Also check it inside a resized `<iframe>` and at phone widths.
 
 ## Hard constraints (from the spec)
 
@@ -37,6 +39,8 @@ Headless check: `chrome --headless=new --screenshot` works, but under `--virtual
 - `src/world/Lighting.js` is central to gameplay, not just visuals. It draws a darkness overlay with light circles cut out, and **light weakens or repels enemies**. Enemy AI therefore needs to query the light sources.
 - `src/core/Input.js` maps keyboard, gamepad and touch onto the same abstract actions (move, jump, attack, special, crouch, pause). Browser events are queued and committed in `input.beginStep()` at the start of each fixed step, so `wasPressed()` is true for exactly one physics step and quick taps are never lost. Read input only inside `update()`, never in `render()`.
 - Scenes implement `enter(game)`, `exit()`, `update(dt)` and `render(ctx, alpha)`. `Game.setScene()` fades through black, and `pushOverlay()`/`popOverlay()` stack overlays such as pause. Only the top overlay updates, but every layer renders. For interpolation, keep the previous state (e.g. `prevT`) and lerp it with `alpha` in `render`.
+- All drawing of entities and tiles lives in `src/render/` (`PlayerRenderer`, `LevelRenderer`), not in `src/entities/` or `src/world/`. Logic objects expose state (`state`, `stateTime`, `runPhase`, `squashX/Y`, `prevCenterX/prevFeetY` for interpolation) and renderers read it. `PlayerRenderer` builds a pose (limb angles) from the state each frame. Its `POSES` constants are shared, so never mutate them.
+- `Player` uses `(x, y)` = top-left of the hitbox, `centerX`/`feetY` getters, and axis-separated tile collision (X then Y). One-way tiles block only when the previous bottom was above them. Ledge grab, climb and heavy landing are tuned via `PLAYER` in `config.js`. The test level (`src/world/levels/testLevel.js`) has one obstacle for each mechanic.
 - `src/core/util.js` provides `clamp`, `lerp`, the seeded `createRng` (procedural art should be deterministic) and `createCanvas` for offscreen pre-rendering of static layers.
 
 ## Workflow (from the spec)

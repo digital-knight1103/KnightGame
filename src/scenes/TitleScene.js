@@ -1,5 +1,7 @@
 import { GAME_TITLE, VIEW } from '../config.js';
 import { clamp, createCanvas, createRng } from '../core/util.js';
+import testLevel from '../world/levels/testLevel.js';
+import { LevelScene } from './LevelScene.js';
 
 const W = VIEW.width;
 const H = VIEW.height;
@@ -26,7 +28,6 @@ export class TitleScene {
     this.prevT = 0;
     this.flash = 0;
     this.prevFlash = 0;
-    this.messageTimer = 0;
 
     const rng = createRng(20261024);
     this.sky = buildSky();
@@ -93,12 +94,10 @@ export class TitleScene {
     this.t += dt;
     this.flash = Math.max(0, this.flash - dt * 2.5);
 
-    if (this.messageTimer > 0) {
-      this.messageTimer -= dt;
-    } else if (this.t > 1.2 && this.game.input.anyPressed()) {
-      // Wybór postaci powstanie w Etapie 3 – na razie tylko potwierdzamy, że wejście działa.
+    if (this.t > 1.2 && this.game.input.anyPressed()) {
+      // Wybór postaci powstanie w Etapie 3 – na razie od razu poziom testowy.
       this.flash = 1;
-      this.messageTimer = 3;
+      this.game.setScene(new LevelScene(testLevel));
     }
   }
 
@@ -181,22 +180,15 @@ export class TitleScene {
     const promptIn = clamp((t - 2.2) / 0.8, 0, 1);
     if (promptIn <= 0) return;
 
+    const pulse = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 2.6));
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    if (this.messageTimer > 0) {
-      const a = clamp(this.messageTimer / 0.5, 0, 1);
-      ctx.font = 'italic 20px Georgia, "Times New Roman", serif';
-      ctx.fillStyle = `rgba(230, 214, 186, ${a})`;
-      ctx.fillText('Wybór postaci pojawi się w kolejnym etapie…', W / 2, 452);
-    } else {
-      const pulse = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 2.6));
-      ctx.font = '20px Georgia, "Times New Roman", serif';
-      ctx.shadowColor = 'rgba(255, 170, 90, 0.6)';
-      ctx.shadowBlur = 12;
-      ctx.fillStyle = `rgba(232, 222, 240, ${pulse * promptIn})`;
-      ctx.fillText(this.promptText, W / 2, 452);
-    }
+    ctx.font = '20px Georgia, "Times New Roman", serif';
+    ctx.shadowColor = 'rgba(255, 170, 90, 0.6)';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = `rgba(232, 222, 240, ${pulse * promptIn})`;
+    ctx.fillText(this.promptText, W / 2, 452);
     ctx.restore();
   }
 }

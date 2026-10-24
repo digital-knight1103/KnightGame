@@ -19,7 +19,7 @@ Na GitHub Pages wystarczy wrzucić pliki – wszystkie ścieżki są względne.
 ## Stan prac
 
 - [x] **Etap 1 – Fundament**: pętla gry ze stałym krokiem 60 Hz i interpolacją, skalowanie canvasu 960×540 do okna/`<iframe>`, obsługa klawiatury i gamepada, menedżer scen z płynnymi przejściami, animowany ekran tytułowy.
-- [ ] Etap 2 – Ruch
+- [x] **Etap 2 – Ruch**: poziom testowy z kafelków (zapisany jako dane), kolizje, platformy przechodnie, kamera z wyprzedzeniem, pełny ruch gracza: bezwładność, coyote time, bufor skoku, zmienna wysokość skoku, chwytanie krawędzi i podciąganie, kucanie, ciężkie lądowanie, proceduralne animacje.
 - [ ] Etap 3 – Dwie postacie
 - [ ] Etap 4 – Potwory i walka
 - [ ] Etap 5 – Klimat
@@ -37,6 +37,13 @@ Na GitHub Pages wystarczy wrzucić pliki – wszystkie ścieżki są względne.
 | Umiejętność | K / C | B |
 | Kucanie | ↓ / S | dół |
 | Pauza | Esc / P | Start |
-| Podgląd FPS (debug) | F3 | – |
+| Zeskok z platformy | ↓ + Spacja | dół + A |
+| Podgląd debug (FPS, hitbox, stan) | F3 | – |
 
-Na razie działa tylko ekran tytułowy: dowolny klawisz, przycisk gamepada, kliknięcie lub dotknięcie potwierdza wejście. Wybór postaci pojawi się w Etapie 3.
+**Krawędzie:** skacząc w stronę ściany, trzymaj kierunek do niej – postać złapie krawędź. Skok lub ↑ = podciągnięcie, ↓ albo kierunek od ściany = puszczenie.
+
+Z ekranu tytułowego dowolny klawisz (lub kliknięcie / dotknięcie) przenosi na poziom testowy. Esc na poziomie tymczasowo wraca do menu (pełna pauza w Etapie 7). Wybór postaci pojawi się w Etapie 3.
+
+### Poziom testowy (od lewej)
+
+schodki 1–3 kafelki → przepaść (upadek = powrót na start) → stos platform przechodnich → ściana 4 kafelki (tylko chwytem krawędzi) → płaskowyż z niskim tunelem (tylko kucając) → wieża i wysoki skok w dół (ciężkie lądowanie) → ściana 5 kafelków → schodki do końca mapy. Przy starcie jest też nawis do sprawdzenia uderzenia głową w sufit.
