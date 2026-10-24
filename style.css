@@ -1,0 +1,34 @@
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Bez przewijania, zaznaczania i gestów przeglądarki – ważne w <iframe> i na telefonie */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+canvas {
+  display: block;
+  background: #000;
+  outline: none;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+noscript {
+  color: #ccc;
+  font-family: Georgia, serif;
+}

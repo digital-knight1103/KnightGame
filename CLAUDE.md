@@ -11,10 +11,12 @@ KnightGame: a dark-fantasy cinematic 2D platformer for the browser. It is hosted
 There is no build step, no npm and no test suite. The game is plain ES modules loaded from `index.html` in the repo root. ES modules don't load over `file://`, so serve the repo root with any static server, for example:
 
 ```
-python -m http.server 8000
+npx --yes http-server -p 8000 -c-1
 ```
 
-Then open http://localhost:8000. "Working" means the game runs with **no console errors**. Also check it inside a resized `<iframe>` and at phone widths.
+Then open http://localhost:8000. Python is not installed on this machine, but Node 18 and Chrome are. Press F3 in game to toggle the FPS/UPS/scene debug overlay.
+
+Headless check: `chrome --headless=new --screenshot` works, but under `--virtual-time-budget` `requestAnimationFrame` barely advances. To see the game after a few seconds, load it from a wrapper page whose `load` event is delayed by a slow resource. With `--enable-logging=stderr --v=0`, console messages appear in stderr as `INFO:CONSOLE` lines. "Working" means the game runs with **no console errors**. Also check it inside a resized `<iframe>` and at phone widths.
 
 ## Hard constraints (from the spec)
 
@@ -33,7 +35,9 @@ Then open http://localhost:8000. "Working" means the game runs with **no console
 - The player (`src/entities/Player.js`) is one state machine shared by both characters (`idle, run, jump, fall, ledgeGrab, climb, crouch, attack, special, hurt, dead`). Per-character stats and abilities live in `src/entities/characters/`. Enemies use their own simple state machines (`patrol, chase, attack, hurt, dead`).
 - Levels (`src/world/levels/`) are pure data: a tile grid plus object lists (enemies, checkpoints, pickups, lights). `Level.js` loads them and handles tile collision.
 - `src/world/Lighting.js` is central to gameplay, not just visuals. It draws a darkness overlay with light circles cut out, and **light weakens or repels enemies**. Enemy AI therefore needs to query the light sources.
-- `src/core/Input.js` maps keyboard, gamepad and touch onto the same abstract actions (move, jump, attack, special, crouch, pause).
+- `src/core/Input.js` maps keyboard, gamepad and touch onto the same abstract actions (move, jump, attack, special, crouch, pause). Browser events are queued and committed in `input.beginStep()` at the start of each fixed step, so `wasPressed()` is true for exactly one physics step and quick taps are never lost. Read input only inside `update()`, never in `render()`.
+- Scenes implement `enter(game)`, `exit()`, `update(dt)` and `render(ctx, alpha)`. `Game.setScene()` fades through black, and `pushOverlay()`/`popOverlay()` stack overlays such as pause. Only the top overlay updates, but every layer renders. For interpolation, keep the previous state (e.g. `prevT`) and lerp it with `alpha` in `render`.
+- `src/core/util.js` provides `clamp`, `lerp`, the seeded `createRng` (procedural art should be deterministic) and `createCanvas` for offscreen pre-rendering of static layers.
 
 ## Workflow (from the spec)
 
